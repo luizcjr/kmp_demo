@@ -2,34 +2,42 @@ import SwiftUI
 import shared
 
 struct ContentView: View {
-    @StateObject
-    var viewModel = HomeViewModel()
+    @StateObject private var viewModel = HomeViewModel()
     
     var body: some View {
-        VStack {
-            if viewModel.response?.isSuccess() == true {
-                List(viewModel.response?.getProducts().items ?? [], id: \.id) { element in
-                    ProductView(product: element)
+            VStack {
+                switch viewModel.response {
+                case let success as RequestState.Success:
+                    List(success.data.items, id: \.id) { element in
+                        ProductView(product: element)
+                    }
+                case let error as RequestState.Error:
+                    VStack {
+                        Spacer()
+                        Text(error.message)
+                            .fontWeight(.bold)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case _ as RequestState.Loading:
+                    VStack {
+                        Spacer()
+                        ProgressView("Loading")
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .padding()
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .none:
+                    EmptyView()
+                case .some(_):
+                    EmptyView()
                 }
-            } else if viewModel.response?.isError() == true {
-                VStack {
-                    Spacer()
-                    Text("\(viewModel.response?.getErrorMessage() ?? "Erro desconhecido")").fontWeight(.bold)
-                    Spacer()
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.response?.isLoading() == true {
-                VStack {
-                    Spacer()
-                    ProgressView("Loading")
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .padding()
-                    Spacer()
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }.task {
-            await viewModel.fetchData()
+            .task {
+                await viewModel.fetchData()
+            }
         }
-    }
 }
 
 struct ContentView_Previews: PreviewProvider {
@@ -41,10 +49,11 @@ struct ContentView_Previews: PreviewProvider {
 class HomeViewModel: ObservableObject {
     @Published
     private(set) var response: RequestState? = nil
+    let productLimit = 10
     
     @MainActor
     func fetchData() async {
-        for await requestState in ProductsApi().fetchProducts(limit: 10) {
+        for await requestState in ProductsApi().fetchProducts(limit: Int32(productLimit)) {
             response = requestState
         }
     }
